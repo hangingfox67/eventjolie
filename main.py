@@ -97,12 +97,6 @@ def hello_eventjolie(name: str) -> str:
 
 
 @mcp.tool()
-def add_numbers(a: int, b: int) -> int:
-    """Dummy sample tool: adds two numbers together."""
-    return a + b
-
-
-@mcp.tool()
 def store_event(title: str, name: str, date: str, location: str) -> str:
     """Stores event info (title, name, date, location) as a JSON file under data/events."""
     EVENTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -280,6 +274,36 @@ def list_attendees() -> list:
         WHERE discoverable = 1
         ORDER BY id DESC
     """).fetchall()
+
+    conn.close()
+
+    attendees = [dict(row) for row in rows]
+    for attendee in attendees:
+        attendee["image_base64"] = _load_attendee_image_base64(attendee["id"])
+
+    return attendees
+
+
+@mcp.tool()
+def search_attendees(name: str) -> list:
+    """Search registered attendees by name (case-insensitive partial match)."""
+
+    conn = get_db()
+
+    rows = conn.execute("""
+        SELECT
+            id,
+            name,
+            linkedin_url,
+            looking_for_today,
+            can_offer,
+            icebreaker,
+            appearance_description,
+            discoverable
+        FROM attendees
+        WHERE name LIKE ?
+        ORDER BY id DESC
+    """, (f"%{name}%",)).fetchall()
 
     conn.close()
 
