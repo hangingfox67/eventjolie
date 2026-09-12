@@ -1,6 +1,7 @@
 import base64
 import binascii
 import json
+import mimetypes
 import os
 import sqlite3
 import uuid
@@ -9,11 +10,12 @@ from pathlib import Path
 
 from mcp.server import MCPServer
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from mcp.server.transport_security import TransportSecuritySettings
 
 
 DB_PATH = os.environ.get("EVENTJOLIE_DB_PATH", "/srv/eventjolie/data/eventjolie.db")
+BASE_URL = os.environ.get("EVENTJOLIE_BASE_URL", "https://eventjolie.com")
 
 mcp = MCPServer("EventJolie")
 
@@ -84,10 +86,10 @@ def save_attendee_image(attendee_id: int, image_base64: str) -> str | None:
     return str(file_path.relative_to(Path(__file__).parent))
 
 
-def _load_attendee_image_base64(attendee_id: int) -> str | None:
-    """Reads back the attendee's image file from data/attendee_images, if any, as base64."""
-    for file_path in IMAGES_DIR.glob(f"{attendee_id}.*"):
-        return base64.b64encode(file_path.read_bytes()).decode("ascii")
+def _attendee_image_url(attendee_id: int) -> str | None:
+    """Returns the absolute URL for the attendee's image (served by /attendees/{id}/image), if any."""
+    if any(IMAGES_DIR.glob(f"{attendee_id}.*")):
+        return f"{BASE_URL}/attendees/{attendee_id}/image"
     return None
 
 
@@ -280,7 +282,7 @@ def list_attendees() -> list:
 
     attendees = [dict(row) for row in rows]
     for attendee in attendees:
-        attendee["image_base64"] = _load_attendee_image_base64(attendee["id"])
+        attendee["image_url"] = _attendee_image_url(attendee["id"])
 
     return attendees
 
@@ -310,7 +312,7 @@ def search_attendees(name: str) -> list:
 
     attendees = [dict(row) for row in rows]
     for attendee in attendees:
-        attendee["image_base64"] = _load_attendee_image_base64(attendee["id"])
+        attendee["image_url"] = _attendee_image_url(attendee["id"])
 
     return attendees
 
@@ -345,6 +347,17 @@ def match_attendees() -> list:
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request: Request):
     return JSONResponse({"status": "ok", "service": "eventjolie"})
+
+
+@mcp.custom_route("/attendees/{attendee_id:int}/image", methods=["GET"])
+async def attendee_image(request: Request):
+    attendee_id = request.path_params["attendee_id"]
+
+    for file_path in IMAGES_DIR.glob(f"{attendee_id}.*"):
+        media_type, _ = mimetypes.guess_type(file_path.name)
+        return Response(file_path.read_bytes(), media_type=media_type or "application/octet-stream")
+
+    return JSONResponse({"error": "image not found"}, status_code=404)
 
 
 security = TransportSecuritySettings(
