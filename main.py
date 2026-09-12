@@ -51,7 +51,8 @@ def init_db():
 init_db()
 
 
-def _save_attendee_image(attendee_id: int, image_base64: str) -> str | None:
+@mcp.tool()
+def save_attendee_image(attendee_id: int, image_base64: str) -> str | None:
     """Decodes a base64 (optionally data-URI prefixed) image and saves it under
     data/attendee_images, named after the attendee id so it can be found again
     without storing anything in the database."""
@@ -243,7 +244,7 @@ def submit_registration(
     conn.commit()
     conn.close()
 
-    image_path = _save_attendee_image(attendee_id, image_base64)
+    image_path = save_attendee_image(attendee_id, image_base64)
 
     return {
         "success": True,
