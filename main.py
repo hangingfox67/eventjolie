@@ -315,6 +315,33 @@ def search_attendees(name: str) -> list:
     return attendees
 
 
+@mcp.tool()
+def match_attendees() -> list:
+    """
+    Returns every discoverable attendee's icebreaker, can_offer, and
+    looking_for_today, for matchmaking: comparing what people are looking
+    for against what others can offer.
+    """
+
+    conn = get_db()
+
+    rows = conn.execute("""
+        SELECT
+            id,
+            name,
+            icebreaker,
+            can_offer,
+            looking_for_today
+        FROM attendees
+        WHERE discoverable = 1
+        ORDER BY id DESC
+    """).fetchall()
+
+    conn.close()
+
+    return [dict(row) for row in rows]
+
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request: Request):
     return JSONResponse({"status": "ok", "service": "eventjolie"})
