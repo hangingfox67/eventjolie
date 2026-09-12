@@ -11,6 +11,12 @@ def hello_eventjolie(name: str) -> str:
     return f"Hello {name}, EventJolie MCP is working."
 
 
+@mcp.tool()
+def add_numbers(a: int, b: int) -> int:
+    """Dummy sample tool: adds two numbers together."""
+    return a + b
+
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request: Request):
     return JSONResponse({"status": "ok", "service": "eventjolie"})
@@ -22,10 +28,16 @@ security = TransportSecuritySettings(
         "eventjolie.com:*",
         "www.eventjolie.com",
         "www.eventjolie.com:*",
+        # local dev only, remove before deploying
+        "127.0.0.1:*",
+        "localhost:*",
     ],
     allowed_origins=[
         "https://eventjolie.com",
         "https://www.eventjolie.com",
+        # local dev only, remove before deploying
+        "http://127.0.0.1:*",
+        "http://localhost:*",
     ],
 )
 
