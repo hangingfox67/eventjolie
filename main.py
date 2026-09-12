@@ -11,7 +11,7 @@ from starlette.responses import JSONResponse
 from mcp.server.transport_security import TransportSecuritySettings
 
 
-DB_PATH = os.environ.get("EVENTJOLIE_DB_PATH", "data/eventjolie.db")
+DB_PATH = os.environ.get("EVENTJOLIE_DB_PATH", "/srv/eventjolie/data/eventjolie.db")
 
 mcp = MCPServer("EventJolie")
 
