@@ -1,3 +1,5 @@
+import base64
+import binascii
 import json
 import os
 import sqlite3
@@ -16,6 +18,7 @@ DB_PATH = os.environ.get("EVENTJOLIE_DB_PATH", "/srv/eventjolie/data/eventjolie.
 mcp = MCPServer("EventJolie")
 
 EVENTS_DIR = Path(__file__).parent / "data" / "events"
+IMAGES_DIR = Path(__file__).parent / "data" / "attendee_images"
 
 
 def get_db():
@@ -46,6 +49,45 @@ def init_db():
 
 
 init_db()
+
+
+def _save_attendee_image(attendee_id: int, image_base64: str) -> str | None:
+    """Decodes a base64 (optionally data-URI prefixed) image and saves it under
+    data/attendee_images, named after the attendee id so it can be found again
+    without storing anything in the database."""
+    if not image_base64:
+        return None
+
+    data = image_base64
+    ext = "jpg"
+    if data.startswith("data:") and ";base64," in data:
+        header, data = data.split(";base64,", 1)
+        mime = header.split(":", 1)[1] if ":" in header else ""
+        if "/" in mime:
+            ext = mime.split("/", 1)[1].lower()
+            if ext == "jpeg":
+                ext = "jpg"
+
+    try:
+        image_bytes = base64.b64decode(data, validate=True)
+    except (ValueError, binascii.Error):
+        return None
+
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+    for old_file in IMAGES_DIR.glob(f"{attendee_id}.*"):
+        old_file.unlink()
+
+    file_path = IMAGES_DIR / f"{attendee_id}.{ext}"
+    file_path.write_bytes(image_bytes)
+    return str(file_path.relative_to(Path(__file__).parent))
+
+
+def _load_attendee_image_base64(attendee_id: int) -> str | None:
+    """Reads back the attendee's image file from data/attendee_images, if any, as base64."""
+    for file_path in IMAGES_DIR.glob(f"{attendee_id}.*"):
+        return base64.b64encode(file_path.read_bytes()).decode("ascii")
+    return None
 
 
 @mcp.tool()
@@ -126,9 +168,14 @@ def submit_registration(
     icebreaker: str = "",
     appearance_description: str = "",
     discoverable: bool = True,
+    image_base64: str = "",
 ) -> dict:
     """
     Register an attendee after completing the EventJolie interview.
+
+    image_base64: the attendee's photo, base64-encoded (a data URI like
+    "data:image/jpeg;base64,..." is also accepted). Saved as a file under
+    data/attendee_images; not stored in the database.
     """
 
     now = datetime.now(timezone.utc).isoformat()
@@ -202,11 +249,14 @@ def submit_registration(
     conn.commit()
     conn.close()
 
+    image_path = _save_attendee_image(attendee_id, image_base64)
+
     return {
         "success": True,
         "action": action,
         "attendee_id": attendee_id,
         "name": name,
+        "image_path": image_path,
         "message": f"{name} has been successfully registered with EventJolie."
     }
 
@@ -233,7 +283,11 @@ def list_attendees() -> list:
 
     conn.close()
 
-    return [dict(row) for row in rows]
+    attendees = [dict(row) for row in rows]
+    for attendee in attendees:
+        attendee["image_base64"] = _load_attendee_image_base64(attendee["id"])
+
+    return attendees
 
 
 @mcp.custom_route("/health", methods=["GET"])
